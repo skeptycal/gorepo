@@ -1,11 +1,16 @@
 package gorepo // import "github.com/skeptycal/gorepo"
 
+Package gorepo is an implementation of a Git repository linked to a remote
+GitHub repository.
+
+func BufferURL(url string) (string, error)
 func BugReportMd() error
 func CodeCovYml() error
 func CodeOfConduct() error
 func DocGo() error
 func FeatureRequestMd() error
 func FundingYml() error
+func GetPage(url string) (string, error)
 func GitCommitAll(message string) error
 func GitWorkflows() error
 func GoDoc() error
@@ -22,3 +27,9 @@ func Shell(command string) string
 func TravisYml() error
 func WriteFile(fileName string, data string) error
 func GetConfig() (*softwareInfo, error)
+type GitRepo struct{ ... }
+type RequestError struct{ ... }
+    func NewRequestError(statusCode int, err error) *RequestError
+type ShellError struct{ ... }
+    func NewShellError(msg string, err error) ShellError
+type User interface{ ... }
