@@ -17,3 +17,6 @@ templates from toptal and implement a choice)
 - .travis.yml options
 - .pre-commit options
 - github workflows (standard and optional)
+
+## setup default version:
+- git tag v0.1.0

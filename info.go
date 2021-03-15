@@ -11,57 +11,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// getParentFolderName returns name of immediate parent folder; used to create repo name
-func getParentFolderName() string {
-	file, err := os.Getwd()
-	if err != nil {
-		log.Errorf("getParentFolderName could not locate parent folder %v", err)
-		return ""
-	}
-	return filepath.Base(file)
-}
-
-func exists(file string) bool {
-	fi, err := os.Stat(file)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-}
-
 func getConfigFileName() (string, error) {
 
+	repoJSONFileName := getParentFolderName() + ".json"
+	log.Info(repoJSONFileName)
+
+	fi, err := os.Stat(repoJSONFileName)
+	if err == nil {
+		return filepath.Abs(fi.Name())
+	}
+
 	// check for default file name
-	repoJsonFileName := configFileDefaultName
-	log.Info(repoJsonFileName)
+	repoJSONFileName = configFileDefaultName
+	log.Info(repoJSONFileName)
 
-	fi, err := os.Stat(repoJsonFileName)
+	fi, err = os.Stat(repoJSONFileName)
 	if err == nil {
-		return repoJsonFileName, nil
-	}
-	if err != os.ErrNotExist {
-		return "", err
+		return fi.Name(), nil
 	}
 
-	repoJsonFileName = getParentFolderName() + ".json"
-	log.Info(repoJsonFileName)
-
-	fi, err := os.Stat(repoJsonFileName)
-	if err == nil {
-		return filepath.Abs(fi.Name()), nil
-	}
-	if err != nil {
-		if err == os.ErrNotExist {
-			configFileName := configFileDefaultName
-			fi, err = os.Stat(configFileName)
-			if err != nil {
-				if err == os.ErrNotExist {
-					return nil, fmt.Errorf("config file %s not found.", configFileName)
-				}
-			}
-		}
-	}
 	return "", errors.New("no configuration file found")
 
 }

@@ -1,3 +1,5 @@
+// Package gorepo is an implementation of a Git repository
+// linked to a remote GitHub repository.
 package gorepo
 
 import (
@@ -11,17 +13,44 @@ import (
 )
 
 const (
-	defaultGitignoreItems = "macos linux windows ssh vscode go zsh node vue nuxt python django"
+	defaultVersion        = "0.1.0"
+	gitHubRemoteFmtString = `https://www.github.com/%s/%s`
+	gitHubDocsFmtString   = `https://%s.github.com/%s`
 )
 
-var (
-	repoName string
-	repoPath string
-)
+// GitRepo represents a git repository and its associated GitHub repository.
+type GitRepo struct {
+	Name           string
+	User           User
+	LocalPath      string
+	Version        string
+	remote         string
+	GitignoreItems string
+}
+
+func (repo *GitRepo) RemoteURL() string {
+	return fmt.Sprintf(gitHubRemoteFmtString, repo.User.UserName, repo.remote)
+}
+
+func (repo *GitRepo) DocsURL() string {
+	return fmt.Sprintf(gitHubDocsFmtString, repo.User.UserName, repo.remote)
+}
 
 func init() {
 	pwd, _ := os.Getwd()
-	repoPath, repoName = path.Split(path.Clean(pwd))
+	pwd = path.Clean(pwd)
+	_, repoName := path.Split(pwd)
+
+	// todo - setup user config save file
+	var user User = defaultUser
+
+	repo := &GitRepo{
+		Name:      repoName,
+		User:      user,
+		LocalPath: pwd,
+		Version:   defaultVersion,
+		remote:    repoName,
+	}
 }
 
 // Setup initializes the repo, creates files, prompts as needed, creates the
@@ -37,6 +66,7 @@ func Setup() error {
 		log.Printf("createAutomatedFiles failed with %v", err)
 		return err
 	}
+	return nil
 }
 
 // gitRepoSetup initializes the repo, prompts as needed, creates the
@@ -77,10 +107,6 @@ func gitIgnore(args string) error {
 	   profile.out
 	*/
 
-	if args == "" {
-		args = defaultGitignoreItems
-	}
-
 	var sb strings.Builder
 	defer sb.Reset()
 
@@ -93,7 +119,11 @@ func gitIgnore(args string) error {
 	sb.WriteString("coverage.txt\nprofile.out\n\n")
 
 	// add .gitignore contents from gitignore.io API
-	sb.WriteString(gi(args))
+	gitignore, err := gi(args)
+	if err != nil {
+		return err
+	}
+	sb.WriteString(gitignore)
 
 	return WriteFile(".gitignore", sb.String())
 }
@@ -114,7 +144,7 @@ func GoMod() error {
 	Shell("go mod init")
 	Shell("go mod tidy")
 	Shell("go mod download")
-	GitCommit("go mod setup")
+	GitCommitAll("go mod setup")
 	return nil
 }
 
@@ -122,6 +152,7 @@ func GoMod() error {
 func GitCommitAll(message string) error {
 	Shell("git add --all")
 	Shell("git commit -m '" + message + "'")
+	return nil
 }
 
 // GoSum creates the go.sum file.

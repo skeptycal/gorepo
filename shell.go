@@ -1,18 +1,116 @@
 package gorepo
 
 import (
-	"encoding/hex"
+	"bufio"
+	"context"
+	"errors"
 	"fmt"
-	"log"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/skeptycal/util/gofile"
+	"github.com/skeptycal/util/stringutils/ansi"
 )
 
 var (
-	redb, _        = hex.DecodeString("1b5b33316d0a") // byte code for ANSI red
-	red     string = string(redb)                     // ANSI red
+	// byte code for ANSI red
+
+	redText   = ansi.RedString
+	whiteText = ansi.WhiteString
+	reset     = ansi.Reset
+
+	shellContext context.Context = context.TODO()
 )
+
+// type result struct {
+// 	stdout string
+// 	stderr string
+// 	retval int
+// 	err    error
+// }
+
+// gi returns a string response from the www.gitignore.io API containing
+// standard .gitignore items for the args given.
+//
+//      default: "macos linux windows ssh vscode go zsh node vue nuxt python django"
+//
+// using: https://www.toptal.com/developers/gitignore/api/macos,linux,windows,ssh,vscode,go,zsh,node,vue,nuxt,python,django
+func gi(args string) (string, error) {
+
+	if len(args) == 0 {
+		args = defaultGitignoreItems
+	}
+
+	args = strings.Join(strings.Split(args, " "), ",")
+
+	url := fmt.Sprintf(defaultGitIgnoreAPIFmtString, args)
+
+	return GetPage(url)
+}
+
+// Shell executes a command line string and returns the result.
+func Shell(command string) string {
+
+	cmd := cmdPrep(command)
+	stdout, err := cmd.Output()
+
+	if err != nil {
+		return fmt.Errorf("%Terror: %v%T", redText, err, reset).Error()
+	}
+
+	return string(stdout)
+}
+
+// GetPage - return result from url
+func GetPage(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("server returned error code: %v", resp.Status)
+	}
+	defer resp.Body.Close()
+
+	buf, err := ioutil.ReadAll(bufio.NewReaderSize(resp.Body, gofile.InitialCapacity(resp.ContentLength)))
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(buf), nil
+}
+
+// BufferURL - read result from url into sb
+func BufferURL(url string) (string, error) {
+	sb := strings.Builder{}
+	defer sb.Reset()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("server returned error code: %v", resp.Status)
+	}
+
+	defer resp.Body.Close()
+
+	_, err = io.Copy(&sb, resp.Body)
+
+	if err != nil {
+		return "", err
+	}
+
+	return sb.String(), nil
+}
 
 // WriteFile creates the file 'fileName' and writes 'data' to it.
 // It returns any error encountered. If the file already exists, it
@@ -37,44 +135,6 @@ func WriteFile(fileName string, data string) error {
 	return nil
 }
 
-// type result struct {
-// 	stdout string
-// 	stderr string
-// 	retval int
-// 	err    error
-// }
-
-// gi returns a string response from the www.gitignore.io API containing
-// standard .gitignore items for the args given.
-//
-//      default: "macos linux windows ssh vscode go zsh node vue nuxt python django"
-//
-// using: https://www.toptal.com/developers/gitignore/api/macos,linux,windows,ssh,vscode,go,zsh,node,vue,nuxt,python,django
-func gi(args string) string {
-
-	if len(args) == 0 {
-		args = []string{"macos linux windows ssh vscode go zsh node vue nuxt python django"}
-	}
-
-	command := "curl -fLw '\n' https://www.gitignore.io/api/\"${(j:,:)@}\" "
-	command += strings.Join(args, " ")
-
-	return Shell(command)
-}
-
-// Shell executes a command line string and returns the result.
-func Shell(command string) string {
-
-	cmd := cmdPrep(command)
-	stdout, err := cmd.Output()
-
-	if err != nil {
-		return fmt.Errorf("%Terror: %v", red, err).Error()
-	}
-
-	return string(stdout)
-}
-
 // OpenTrunc creates and opens the named file for writing. If successful, methods on
 // the returned file can be used for writing; the associated file descriptor has mode
 //      O_WRONLY|O_CREATE|O_TRUNC
@@ -92,16 +152,31 @@ func cmdPrep(command string) *exec.Cmd {
 	commandSlice := strings.Split(command, " ")
 	app := commandSlice[0]
 	args := strings.Join(commandSlice[1:], " ")
-	return exec.Command(app, args)
+	return exec.CommandContext(shellContext, app, args)
+}
+
+// getParentFolderName returns name of immediate parent folder; used to create repo name
+func getParentFolderName() string {
+	file, err := os.Getwd()
+	if err != nil {
+		log.Errorf("getParentFolderName could not locate parent folder %v", err)
+		return ""
+	}
+	return filepath.Base(file)
 }
 
 // fileExists checks if a file exists and is not a directory
 func fileExists(fileName string) bool {
 	info, err := os.Stat(fileName)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func exists(file string) bool {
+	_, err := os.Stat(file)
+	return err == nil
 }
 
 // Notes: Cmd struct summary:
